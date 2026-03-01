@@ -10,11 +10,12 @@ export default function FeedPage() {
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<any[]>([]);
 
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getUser();
-
       if (!data.user) {
         router.push("/login");
         return;
@@ -96,6 +97,29 @@ export default function FeedPage() {
     fetchPosts(user);
   };
 
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .ilike("username", `%${search}%`);
+
+    if (data) setResults(data);
+  };
+
+  const handleAddFriend = async (profileId: string) => {
+    if (!user || profileId === user.id) return;
+
+    await supabase.from("friend_requests").insert({
+      sender_id: user.id,
+      receiver_id: profileId,
+      status: "pending",
+    });
+
+    alert("Friend request sent!");
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
@@ -103,6 +127,7 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
+
       <div className="flex justify-between mb-6">
         <h1 className="text-2xl font-bold">Feed</h1>
 
@@ -125,6 +150,39 @@ export default function FeedPage() {
         </div>
       </div>
 
+      {/* 🔍 SEARCH SECTION */}
+      <div className="border p-4 mb-6">
+        <input
+          type="text"
+          placeholder="Search users..."
+          className="border p-2 w-full mb-2"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <button
+          onClick={handleSearch}
+          className="bg-blue-600 text-white px-4 py-2"
+        >
+          Search
+        </button>
+
+        {results.map((r) => (
+          <div key={r.id} className="flex justify-between mt-3 border p-2">
+            <Link href={`/profile/${r.username}`}>
+              {r.username}
+            </Link>
+            <button
+              onClick={() => handleAddFriend(r.id)}
+              className="bg-green-600 text-white px-3 py-1"
+            >
+              Add
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* POSTS */}
       <div className="space-y-4">
         {posts.map((post) => (
           <div key={post.id} className="border p-4">
@@ -160,6 +218,7 @@ export default function FeedPage() {
           </div>
         ))}
       </div>
+
     </div>
   );
 }
