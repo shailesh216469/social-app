@@ -13,6 +13,8 @@ export default function FeedPage() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
+    let channel: any;
+
     const init = async () => {
       const { data } = await supabase.auth.getUser();
 
@@ -25,9 +27,32 @@ export default function FeedPage() {
 
       await fetchPosts(data.user);
       await fetchPendingRequests(data.user);
+
+      // 🔴 REALTIME SUBSCRIPTION
+      channel = supabase
+        .channel("friend-requests-channel")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "friend_requests",
+            filter: `receiver_id=eq.${data.user.id}`,
+          },
+          () => {
+            setPendingCount((prev) => prev + 1);
+          }
+        )
+        .subscribe();
     };
 
     init();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [router]);
 
   const fetchPendingRequests = async (currentUser: any) => {
@@ -75,10 +100,15 @@ export default function FeedPage() {
   const handleCreatePost = async () => {
     if (!content.trim() || !user) return;
 
-    await supabase.from("posts").insert({
+    const { error } = await supabase.from("posts").insert({
       content,
       user_id: user.id,
     });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
     setContent("");
     fetchPosts(user);
