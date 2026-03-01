@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import CreatePost from "@/components/CreatePost";
 import PostCard from "@/components/PostCard";
 import SearchUsers from "@/components/SearchUsers";
+import FeedHeader from "@/components/FeedHeader";
 
 type CommentType = {
   id: string;
@@ -130,7 +130,7 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- ACTION HANDLERS ---------------- */
+  /* ---------------- ACTIONS ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
@@ -183,30 +183,13 @@ export default function FeedPage() {
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
 
-      {/* HEADER */}
-      <div className="flex justify-between mb-6">
-        <h1 className="text-2xl font-bold">Feed</h1>
+      {user && (
+        <FeedHeader
+          pendingCount={pendingCount}
+          onLogout={handleLogout}
+        />
+      )}
 
-        <div className="flex gap-4 items-center">
-          <Link href="/friends" className="text-blue-600 relative">
-            Friends
-            {pendingCount > 0 && (
-              <span className="ml-1 bg-red-600 text-white text-xs px-2 py-1 rounded-full">
-                {pendingCount}
-              </span>
-            )}
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="bg-black text-white px-4 py-2"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-
-      {/* CREATE POST */}
       {user && (
         <CreatePost
           userId={user.id}
@@ -214,10 +197,8 @@ export default function FeedPage() {
         />
       )}
 
-      {/* SEARCH USERS COMPONENT */}
       {user && <SearchUsers currentUserId={user.id} />}
 
-      {/* POSTS */}
       <div className="space-y-6">
         {user &&
           posts.map((post) => (
