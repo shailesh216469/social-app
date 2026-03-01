@@ -58,7 +58,7 @@ export default function FeedPage() {
     init();
   }, [router]);
 
-  /* ---------------- FETCH POSTS (CURSOR) ---------------- */
+  /* ---------------- FETCH POSTS ---------------- */
 
   const fetchPosts = async (currentUser: any, append: boolean) => {
     const { data: friendships } = await supabase
@@ -113,25 +113,19 @@ export default function FeedPage() {
       content: post.content,
       created_at: post.created_at,
       user_id: post.user_id,
-
-      // Normalize post profile
       profiles: Array.isArray(post.profiles)
         ? post.profiles[0] || null
         : post.profiles,
-
-      // Normalize comments + profiles
-      comments: (post.comments || []).map((comment: any) => ({
-        id: comment.id,
-        content: comment.content,
-        user_id: comment.user_id,
-        created_at: comment.created_at,
-        profiles: Array.isArray(comment.profiles)
-          ? comment.profiles[0] || null
-          : comment.profiles,
+      comments: (post.comments || []).map((c: any) => ({
+        id: c.id,
+        content: c.content,
+        user_id: c.user_id,
+        created_at: c.created_at,
+        profiles: Array.isArray(c.profiles)
+          ? c.profiles[0] || null
+          : c.profiles,
       })),
-
       likeCount: post.post_likes?.length || 0,
-
       likedByMe:
         post.post_likes?.some(
           (like: any) => like.user_id === currentUser.id
@@ -156,13 +150,10 @@ export default function FeedPage() {
 
   const loadMore = async () => {
     if (!user || !hasMore || loadingMore) return;
-
     setLoadingMore(true);
     await fetchPosts(user, true);
     setLoadingMore(false);
   };
-
-  /* ---------------- SCROLL DETECTION ---------------- */
 
   useEffect(() => {
     const handleScroll = () => {
@@ -178,7 +169,7 @@ export default function FeedPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [cursor, hasMore, loadingMore, user]);
 
-  /* ---------------- OPTIMIZED REALTIME ---------------- */
+  /* ---------------- REALTIME ---------------- */
 
   useEffect(() => {
     if (!user) return;
@@ -253,7 +244,7 @@ export default function FeedPage() {
 
             if (!data) return;
 
-            const normalizedComment: CommentType = {
+            const normalized: CommentType = {
               id: data.id,
               content: data.content,
               user_id: data.user_id,
@@ -268,7 +259,7 @@ export default function FeedPage() {
                 post.id === postId
                   ? {
                       ...post,
-                      comments: [...post.comments, normalizedComment],
+                      comments: [...post.comments, normalized],
                     }
                   : post
               )
@@ -299,10 +290,25 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- ACTIONS ---------------- */
+  /* ---------------- OPTIMISTIC LIKE ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
+
+    // Instant UI update
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              likeCount: liked
+                ? Math.max(post.likeCount - 1, 0)
+                : post.likeCount + 1,
+              likedByMe: !liked,
+            }
+          : post
+      )
+    );
 
     if (liked) {
       await supabase
