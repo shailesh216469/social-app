@@ -113,9 +113,25 @@ export default function FeedPage() {
       content: post.content,
       created_at: post.created_at,
       user_id: post.user_id,
-      profiles: post.profiles,
-      comments: post.comments || [],
+
+      // Normalize post profile
+      profiles: Array.isArray(post.profiles)
+        ? post.profiles[0] || null
+        : post.profiles,
+
+      // Normalize comments + profiles
+      comments: (post.comments || []).map((comment: any) => ({
+        id: comment.id,
+        content: comment.content,
+        user_id: comment.user_id,
+        created_at: comment.created_at,
+        profiles: Array.isArray(comment.profiles)
+          ? comment.profiles[0] || null
+          : comment.profiles,
+      })),
+
       likeCount: post.post_likes?.length || 0,
+
       likedByMe:
         post.post_likes?.some(
           (like: any) => like.user_id === currentUser.id
@@ -237,10 +253,23 @@ export default function FeedPage() {
 
             if (!data) return;
 
+            const normalizedComment: CommentType = {
+              id: data.id,
+              content: data.content,
+              user_id: data.user_id,
+              created_at: data.created_at,
+              profiles: Array.isArray(data.profiles)
+                ? data.profiles[0] || null
+                : data.profiles,
+            };
+
             setPosts((prev) =>
               prev.map((post) =>
                 post.id === postId
-                  ? { ...post, comments: [...post.comments, data] }
+                  ? {
+                      ...post,
+                      comments: [...post.comments, normalizedComment],
+                    }
                   : post
               )
             );
@@ -321,7 +350,6 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
-
       {user && (
         <FeedHeader
           pendingCount={pendingCount}
