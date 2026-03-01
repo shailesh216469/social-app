@@ -14,12 +14,9 @@ export default function ProfilePage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchData = async () => {
       // Get logged-in user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
       // Get profile by username
@@ -32,7 +29,7 @@ export default function ProfilePage() {
       if (data) {
         setProfile(data);
 
-        // Get posts of that user
+        // Get user's posts
         const { data: userPosts } = await supabase
           .from("posts")
           .select("*")
@@ -43,8 +40,26 @@ export default function ProfilePage() {
       }
     };
 
-    fetchProfile();
+    fetchData();
   }, [username]);
+
+  const handleAddFriend = async () => {
+    if (!currentUser) {
+      alert("Login first");
+      return;
+    }
+
+    const { error } = await supabase.from("friend_requests").insert({
+      sender_id: currentUser.id,
+      receiver_id: profile.id,
+    });
+
+    if (error) {
+      alert(error.message);
+    } else {
+      alert("Friend request sent!");
+    }
+  };
 
   if (!profile) return <p className="p-6">Loading...</p>;
 
@@ -53,8 +68,8 @@ export default function ProfilePage() {
       <div className="border p-4 mb-6">
         <h1 className="text-2xl font-bold">@{profile.username}</h1>
 
-        {/* Show Edit only if logged user owns this profile */}
-        {currentUser?.id === profile.id && (
+        {/* Show Edit only on your own profile */}
+        {currentUser && currentUser.id === profile.id && (
           <Link
             href="/edit-profile"
             className="inline-block mt-2 text-sm text-blue-600"
@@ -63,7 +78,17 @@ export default function ProfilePage() {
           </Link>
         )}
 
-        <p>{profile.full_name}</p>
+        {/* Show Add Friend only on other profiles */}
+        {currentUser && currentUser.id !== profile.id && (
+          <button
+            onClick={handleAddFriend}
+            className="mt-3 bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Add Friend
+          </button>
+        )}
+
+        <p className="mt-2">{profile.full_name}</p>
         <p className="text-gray-500">{profile.bio}</p>
       </div>
 
