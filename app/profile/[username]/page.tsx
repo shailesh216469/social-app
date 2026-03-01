@@ -12,38 +12,68 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isFriend, setIsFriend] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      // Get logged in user
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // Get profile by username
       const { data } = await supabase
         .from("profiles")
         .select("*")
         .eq("username", username)
         .single();
 
-      if (data) {
-        setProfile(data);
+      if (!data) return;
 
-        // Get posts
-        const { data: userPosts } = await supabase
-          .from("posts")
+      setProfile(data);
+
+      const { data: userPosts } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("user_id", data.id)
+        .order("created_at", { ascending: false });
+
+      if (userPosts) setPosts(userPosts);
+
+      // 🔎 Check if already friends
+      if (user) {
+        const { data: friendship } = await supabase
+          .from("friendships")
           .select("*")
-          .eq("user_id", data.id)
-          .order("created_at", { ascending: false });
+          .or(
+            `and(user_id_1.eq.${user.id},user_id_2.eq.${data.id}),
+             and(user_id_1.eq.${data.id},user_id_2.eq.${user.id})`
+          )
+          .maybeSingle();
 
-        if (userPosts) setPosts(userPosts);
+        if (friendship) setIsFriend(true);
       }
     };
 
     fetchData();
   }, [username]);
 
-  // 🔥 UPDATED SAFE FRIEND LOGIC
+  const handleUnfriend = async () => {
+    if (!currentUser) return;
+
+    const { error } = await supabase
+      .from("friendships")
+      .delete()
+      .or(
+        `and(user_id_1.eq.${currentUser.id},user_id_2.eq.${profile.id}),
+         and(user_id_1.eq.${profile.id},user_id_2.eq.${currentUser.id})`
+      );
+
+    if (error) {
+      alert(error.message);
+    } else {
+      alert("Unfriended successfully");
+      setIsFriend(false);
+    }
+  };
+
   const handleAddFriend = async () => {
     if (!currentUser) {
       alert("Login first");
@@ -55,7 +85,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // 1️⃣ Check if already friends
     const { data: existingFriendship } = await supabase
       .from("friendships")
       .select("*")
@@ -70,20 +99,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // 2️⃣ Check if request already sent
-    const { data: existingRequest } = await supabase
-      .from("friend_requests")
-      .select("*")
-      .eq("sender_id", currentUser.id)
-      .eq("receiver_id", profile.id)
-      .maybeSingle();
-
-    if (existingRequest) {
-      alert("Friend request already sent");
-      return;
-    }
-
-    // 3️⃣ Send new request
     const { error } = await supabase.from("friend_requests").insert({
       sender_id: currentUser.id,
       receiver_id: profile.id,
@@ -103,7 +118,7 @@ export default function ProfilePage() {
       <div className="border p-4 mb-6">
         <h1 className="text-2xl font-bold">@{profile.username}</h1>
 
-        {/* Show Edit on own profile */}
+        {/* Edit own profile */}
         {currentUser && currentUser.id === profile.id && (
           <Link
             href="/edit-profile"
@@ -113,15 +128,29 @@ export default function ProfilePage() {
           </Link>
         )}
 
-        {/* Show Add Friend on other profiles */}
-        {currentUser && currentUser.id !== profile.id && (
-          <button
-            onClick={handleAddFriend}
-            className="mt-3 bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Add Friend
-          </button>
-        )}
+        {/* If friends show Unfriend */}
+        {currentUser &&
+          currentUser.id !== profile.id &&
+          isFriend && (
+            <button
+              onClick={handleUnfriend}
+              className="mt-3 bg-red-600 text-white px-4 py-2 rounded"
+            >
+              Unfriend
+            </button>
+          )}
+
+        {/* If not friends show Add Friend */}
+        {currentUser &&
+          currentUser.id !== profile.id &&
+          !isFriend && (
+            <button
+              onClick={handleAddFriend}
+              className="mt-3 bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Add Friend
+            </button>
+          )}
 
         <p className="mt-2">{profile.full_name}</p>
         <p className="text-gray-500">{profile.bio}</p>
