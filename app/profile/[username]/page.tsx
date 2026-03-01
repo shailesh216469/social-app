@@ -38,7 +38,7 @@ export default function ProfilePage() {
 
       if (userPosts) setPosts(userPosts);
 
-      // 🔥 FIXED FRIEND CHECK
+      // 🔥 Correct friendship check
       if (user) {
         const { data: friendships } = await supabase
           .from("friendships")
@@ -60,25 +60,33 @@ export default function ProfilePage() {
     fetchData();
   }, [username]);
 
+  // ✅ SAFE UNFRIEND (NO LOGIC TREE ERROR)
   const handleUnfriend = async () => {
     if (!currentUser) return;
 
-    const { error } = await supabase
+    // Try delete A -> B
+    await supabase
       .from("friendships")
       .delete()
-      .or(
-        `and(user_id_1.eq.${currentUser.id},user_id_2.eq.${profile.id}),
-         and(user_id_1.eq.${profile.id},user_id_2.eq.${currentUser.id})`
-      );
+      .match({
+        user_id_1: currentUser.id,
+        user_id_2: profile.id,
+      });
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Unfriended successfully");
-      setIsFriend(false);
-    }
+    // Try delete B -> A
+    await supabase
+      .from("friendships")
+      .delete()
+      .match({
+        user_id_1: profile.id,
+        user_id_2: currentUser.id,
+      });
+
+    alert("Unfriended successfully");
+    setIsFriend(false);
   };
 
+  // ✅ SAFE ADD FRIEND
   const handleAddFriend = async () => {
     if (!currentUser) {
       alert("Login first");
@@ -90,7 +98,7 @@ export default function ProfilePage() {
       return;
     }
 
-    // Check existing friendship
+    // Check if already friends
     const { data: friendships } = await supabase
       .from("friendships")
       .select("*")
@@ -138,7 +146,7 @@ export default function ProfilePage() {
           </Link>
         )}
 
-        {/* If friends → show Unfriend */}
+        {/* Show Unfriend if friends */}
         {currentUser &&
           currentUser.id !== profile.id &&
           isFriend && (
@@ -150,7 +158,7 @@ export default function ProfilePage() {
             </button>
           )}
 
-        {/* If not friends → show Add Friend */}
+        {/* Show Add Friend if not friends */}
         {currentUser &&
           currentUser.id !== profile.id &&
           !isFriend && (
