@@ -15,7 +15,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Get logged-in user
+      // Get logged in user
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
@@ -29,7 +29,7 @@ export default function ProfilePage() {
       if (data) {
         setProfile(data);
 
-        // Get user's posts
+        // Get posts
         const { data: userPosts } = await supabase
           .from("posts")
           .select("*")
@@ -43,12 +43,47 @@ export default function ProfilePage() {
     fetchData();
   }, [username]);
 
+  // 🔥 UPDATED SAFE FRIEND LOGIC
   const handleAddFriend = async () => {
     if (!currentUser) {
       alert("Login first");
       return;
     }
 
+    if (currentUser.id === profile.id) {
+      alert("You cannot add yourself");
+      return;
+    }
+
+    // 1️⃣ Check if already friends
+    const { data: existingFriendship } = await supabase
+      .from("friendships")
+      .select("*")
+      .or(
+        `and(user_id_1.eq.${currentUser.id},user_id_2.eq.${profile.id}),
+         and(user_id_1.eq.${profile.id},user_id_2.eq.${currentUser.id})`
+      )
+      .maybeSingle();
+
+    if (existingFriendship) {
+      alert("You are already friends");
+      return;
+    }
+
+    // 2️⃣ Check if request already sent
+    const { data: existingRequest } = await supabase
+      .from("friend_requests")
+      .select("*")
+      .eq("sender_id", currentUser.id)
+      .eq("receiver_id", profile.id)
+      .maybeSingle();
+
+    if (existingRequest) {
+      alert("Friend request already sent");
+      return;
+    }
+
+    // 3️⃣ Send new request
     const { error } = await supabase.from("friend_requests").insert({
       sender_id: currentUser.id,
       receiver_id: profile.id,
@@ -68,7 +103,7 @@ export default function ProfilePage() {
       <div className="border p-4 mb-6">
         <h1 className="text-2xl font-bold">@{profile.username}</h1>
 
-        {/* Show Edit only on your own profile */}
+        {/* Show Edit on own profile */}
         {currentUser && currentUser.id === profile.id && (
           <Link
             href="/edit-profile"
@@ -78,7 +113,7 @@ export default function ProfilePage() {
           </Link>
         )}
 
-        {/* Show Add Friend only on other profiles */}
+        {/* Show Add Friend on other profiles */}
         {currentUser && currentUser.id !== profile.id && (
           <button
             onClick={handleAddFriend}
