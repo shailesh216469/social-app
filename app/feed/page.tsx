@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import CreatePost from "@/components/CreatePost";
+import PostCard from "@/components/PostCard";
 
 type CommentType = {
   id: string;
@@ -106,7 +107,7 @@ export default function FeedPage() {
     setPosts(formatted);
   };
 
-  /* ---------------- REALTIME (COMMENTS + LIKES) ---------------- */
+  /* ---------------- REALTIME ---------------- */
 
   useEffect(() => {
     if (!user) return;
@@ -130,7 +131,7 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- LIKE ---------------- */
+  /* ---------------- ACTION HANDLERS ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
@@ -146,8 +147,6 @@ export default function FeedPage() {
         .insert({ post_id: postId, user_id: user.id });
     }
   };
-
-  /* ---------------- COMMENTS ---------------- */
 
   const addComment = async (postId: string, text: string) => {
     if (!user || !text.trim()) return;
@@ -165,8 +164,6 @@ export default function FeedPage() {
     await supabase.from("comments").delete().eq("id", commentId);
   };
 
-  /* ---------------- FRIEND REQUEST BADGE ---------------- */
-
   const fetchPendingRequests = async (currentUser: any) => {
     const { count } = await supabase
       .from("friend_requests")
@@ -176,8 +173,6 @@ export default function FeedPage() {
 
     setPendingCount(count || 0);
   };
-
-  /* ---------------- SEARCH ---------------- */
 
   const handleSearch = async () => {
     if (!search.trim()) return;
@@ -201,8 +196,6 @@ export default function FeedPage() {
 
     alert("Friend request sent!");
   };
-
-  /* ---------------- LOGOUT ---------------- */
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -237,7 +230,7 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* CREATE POST COMPONENT */}
+      {/* CREATE POST */}
       {user && (
         <CreatePost
           userId={user.id}
@@ -254,7 +247,6 @@ export default function FeedPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-
         <button
           onClick={handleSearch}
           className="bg-blue-600 text-white px-4 py-2"
@@ -279,103 +271,18 @@ export default function FeedPage() {
 
       {/* POSTS */}
       <div className="space-y-6">
-        {posts.map((post) => (
-          <div key={post.id} className="border p-4">
-
-            <Link
-              href={`/profile/${post.profiles?.username}`}
-              className="font-bold text-blue-600"
-            >
-              {post.profiles?.username}
-            </Link>
-
-            <p className="mt-2">{post.content}</p>
-
-            {/* LIKE */}
-            <div className="flex items-center gap-4 mt-3">
-              <button
-                onClick={() => toggleLike(post.id, post.likedByMe)}
-                className={`px-3 py-1 rounded ${
-                  post.likedByMe
-                    ? "bg-red-600 text-white"
-                    : "bg-gray-200"
-                }`}
-              >
-                {post.likedByMe ? "Unlike ❤️" : "Like 🤍"}
-              </button>
-
-              <span className="text-gray-600 text-sm">
-                {post.likeCount} likes
-              </span>
-            </div>
-
-            {/* COMMENTS */}
-            <div className="mt-4 space-y-3">
-              {post.comments?.map((comment) => (
-                <div key={comment.id} className="bg-gray-100 p-2 rounded">
-                  <div className="flex justify-between">
-                    <span className="font-bold text-sm">
-                      {comment.profiles?.username}
-                    </span>
-
-                    {user?.id === comment.user_id && (
-                      <button
-                        onClick={() => deleteComment(comment.id)}
-                        className="text-red-500 text-xs"
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-
-                  <p className="text-sm">{comment.content}</p>
-                </div>
-              ))}
-
-              <AddCommentInput
-                onSubmit={(text: string) =>
-                  addComment(post.id, text)
-                }
-              />
-            </div>
-
-            <small className="text-gray-500 block mt-2">
-              {new Date(post.created_at).toLocaleString()}
-            </small>
-          </div>
-        ))}
+        {user &&
+          posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              currentUserId={user.id}
+              onLikeToggle={toggleLike}
+              onAddComment={addComment}
+              onDeleteComment={deleteComment}
+            />
+          ))}
       </div>
-    </div>
-  );
-}
-
-/* COMMENT INPUT COMPONENT */
-function AddCommentInput({
-  onSubmit,
-}: {
-  onSubmit: (text: string) => void;
-}) {
-  const [text, setText] = useState<string>("");
-
-  return (
-    <div className="flex gap-2">
-      <input
-        type="text"
-        placeholder="Write a comment..."
-        className="border p-2 flex-1 text-sm"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <button
-        onClick={() => {
-          if (!text.trim()) return;
-          onSubmit(text);
-          setText("");
-        }}
-        className="bg-blue-600 text-white px-3 text-sm"
-      >
-        Post
-      </button>
     </div>
   );
 }
