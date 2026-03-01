@@ -11,6 +11,8 @@ export default function FeedPage() {
   const [content, setContent] = useState("");
   const [posts, setPosts] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<any[]>([]);
 
   useEffect(() => {
     let channel: any;
@@ -28,7 +30,6 @@ export default function FeedPage() {
       await fetchPosts(data.user);
       await fetchPendingRequests(data.user);
 
-      // 🔴 REALTIME SUBSCRIPTION
       channel = supabase
         .channel("friend-requests-channel")
         .on(
@@ -49,9 +50,7 @@ export default function FeedPage() {
     init();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      if (channel) supabase.removeChannel(channel);
     };
   }, [router]);
 
@@ -97,21 +96,35 @@ export default function FeedPage() {
     if (data) setPosts(data);
   };
 
-  const handleCreatePost = async () => {
-    if (!content.trim() || !user) return;
+  const handleSearch = async () => {
+    if (!search.trim()) return;
 
-    const { error } = await supabase.from("posts").insert({
-      content,
-      user_id: user.id,
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .ilike("username", `%${search}%`);
+
+    if (data) setResults(data);
+  };
+
+  const handleAddFriend = async (profileId: string) => {
+    if (!user) return;
+
+    if (profileId === user.id) {
+      alert("Cannot add yourself");
+      return;
+    }
+
+    const { error } = await supabase.from("friend_requests").insert({
+      sender_id: user.id,
+      receiver_id: profileId,
     });
 
     if (error) {
       alert(error.message);
-      return;
+    } else {
+      alert("Friend request sent!");
     }
-
-    setContent("");
-    fetchPosts(user);
   };
 
   const handleLogout = async () => {
@@ -121,6 +134,7 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
+
       <div className="flex justify-between mb-6">
         <h1 className="text-2xl font-bold">Feed</h1>
 
@@ -143,6 +157,39 @@ export default function FeedPage() {
         </div>
       </div>
 
+      {/* 🔍 SEARCH */}
+      <div className="border p-4 mb-6">
+        <input
+          type="text"
+          placeholder="Search users..."
+          className="border p-2 w-full mb-2"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <button
+          onClick={handleSearch}
+          className="bg-blue-600 text-white px-4 py-2"
+        >
+          Search
+        </button>
+
+        {results.map((r) => (
+          <div key={r.id} className="flex justify-between mt-3 border p-2">
+            <Link href={`/profile/${r.username}`}>
+              {r.username}
+            </Link>
+            <button
+              onClick={() => handleAddFriend(r.id)}
+              className="bg-green-600 text-white px-3 py-1"
+            >
+              Add
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* POST BOX */}
       <div className="border p-4 mb-6">
         <textarea
           placeholder="What's on your mind?"
@@ -151,13 +198,14 @@ export default function FeedPage() {
           onChange={(e) => setContent(e.target.value)}
         />
         <button
-          onClick={handleCreatePost}
+          onClick={() => user && fetchPosts(user)}
           className="bg-black text-white px-4 py-2"
         >
-          Post
+          Refresh Feed
         </button>
       </div>
 
+      {/* POSTS */}
       <div className="space-y-4">
         {posts.map((post) => (
           <div key={post.id} className="border p-4">
@@ -174,6 +222,7 @@ export default function FeedPage() {
           </div>
         ))}
       </div>
+
     </div>
   );
 }
