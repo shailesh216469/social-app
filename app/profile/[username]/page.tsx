@@ -11,9 +11,18 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
+      // Get logged-in user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      setCurrentUser(user);
+
+      // Get profile by username
       const { data } = await supabase
         .from("profiles")
         .select("*")
@@ -23,6 +32,7 @@ export default function ProfilePage() {
       if (data) {
         setProfile(data);
 
+        // Get posts of that user
         const { data: userPosts } = await supabase
           .from("posts")
           .select("*")
@@ -42,12 +52,17 @@ export default function ProfilePage() {
     <div className="min-h-screen p-6 max-w-xl mx-auto">
       <div className="border p-4 mb-6">
         <h1 className="text-2xl font-bold">@{profile.username}</h1>
-<Link
-  href="/edit-profile"
-  className="inline-block mt-2 text-sm text-blue-600"
->
-  Edit Profile
-</Link>
+
+        {/* Show Edit only if logged user owns this profile */}
+        {currentUser?.id === profile.id && (
+          <Link
+            href="/edit-profile"
+            className="inline-block mt-2 text-sm text-blue-600"
+          >
+            Edit Profile
+          </Link>
+        )}
+
         <p>{profile.full_name}</p>
         <p className="text-gray-500">{profile.bio}</p>
       </div>
