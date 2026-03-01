@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import CreatePost from "@/components/CreatePost";
 
 type CommentType = {
   id: string;
@@ -30,7 +31,6 @@ export default function FeedPage() {
 
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
-  const [newPost, setNewPost] = useState<string>("");
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [search, setSearch] = useState<string>("");
   const [results, setResults] = useState<any[]>([]);
@@ -113,45 +113,22 @@ export default function FeedPage() {
 
     const channel = supabase
       .channel("social-realtime")
-
-      // Comment events
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "comments" },
-        () => {
-          fetchPosts(user);
-        }
+        () => fetchPosts(user)
       )
-
-      // Like events
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_likes" },
-        () => {
-          fetchPosts(user);
-        }
+        () => fetchPosts(user)
       )
-
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [user]);
-
-  /* ---------------- CREATE POST ---------------- */
-
-  const createPost = async () => {
-    if (!user || !newPost.trim()) return;
-
-    await supabase.from("posts").insert({
-      content: newPost,
-      user_id: user.id,
-    });
-
-    setNewPost("");
-    fetchPosts(user);
-  };
 
   /* ---------------- LIKE ---------------- */
 
@@ -260,21 +237,13 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* CREATE POST */}
-      <div className="border p-4 mb-6">
-        <textarea
-          placeholder="What's on your mind?"
-          className="w-full border p-2 mb-2"
-          value={newPost}
-          onChange={(e) => setNewPost(e.target.value)}
+      {/* CREATE POST COMPONENT */}
+      {user && (
+        <CreatePost
+          userId={user.id}
+          onPostCreated={() => fetchPosts(user)}
         />
-        <button
-          onClick={createPost}
-          className="bg-black text-white px-4 py-2"
-        >
-          Post
-        </button>
-      </div>
+      )}
 
       {/* SEARCH */}
       <div className="border p-4 mb-6">
@@ -285,6 +254,7 @@ export default function FeedPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+
         <button
           onClick={handleSearch}
           className="bg-blue-600 text-white px-4 py-2"
