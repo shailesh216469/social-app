@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import CreatePost from "@/components/CreatePost";
 import PostCard from "@/components/PostCard";
+import SearchUsers from "@/components/SearchUsers";
 
 type CommentType = {
   id: string;
@@ -33,8 +34,6 @@ export default function FeedPage() {
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
   const [pendingCount, setPendingCount] = useState<number>(0);
-  const [search, setSearch] = useState<string>("");
-  const [results, setResults] = useState<any[]>([]);
 
   /* ---------------- INITIAL LOAD ---------------- */
 
@@ -174,29 +173,6 @@ export default function FeedPage() {
     setPendingCount(count || 0);
   };
 
-  const handleSearch = async () => {
-    if (!search.trim()) return;
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username")
-      .ilike("username", `%${search}%`);
-
-    if (data) setResults(data);
-  };
-
-  const handleAddFriend = async (profileId: string) => {
-    if (!user || profileId === user.id) return;
-
-    await supabase.from("friend_requests").insert({
-      sender_id: user.id,
-      receiver_id: profileId,
-      status: "pending",
-    });
-
-    alert("Friend request sent!");
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
@@ -238,36 +214,8 @@ export default function FeedPage() {
         />
       )}
 
-      {/* SEARCH */}
-      <div className="border p-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search users..."
-          className="border p-2 w-full mb-2"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <button
-          onClick={handleSearch}
-          className="bg-blue-600 text-white px-4 py-2"
-        >
-          Search
-        </button>
-
-        {results.map((r) => (
-          <div key={r.id} className="flex justify-between mt-3 border p-2">
-            <Link href={`/profile/${r.username}`}>
-              {r.username}
-            </Link>
-            <button
-              onClick={() => handleAddFriend(r.id)}
-              className="bg-green-600 text-white px-3 py-1"
-            >
-              Add
-            </button>
-          </div>
-        ))}
-      </div>
+      {/* SEARCH USERS COMPONENT */}
+      {user && <SearchUsers currentUserId={user.id} />}
 
       {/* POSTS */}
       <div className="space-y-6">
