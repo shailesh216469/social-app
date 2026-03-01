@@ -34,11 +34,11 @@ export default function FeedPage() {
 
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
-  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const [cursor, setCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   /* ---------------- INITIAL LOAD ---------------- */
 
@@ -146,7 +146,7 @@ export default function FeedPage() {
     }
   };
 
-  /* ---------------- LOAD MORE ---------------- */
+  /* ---------------- INFINITE SCROLL ---------------- */
 
   const loadMore = async () => {
     if (!user || !hasMore || loadingMore) return;
@@ -177,28 +177,30 @@ export default function FeedPage() {
     const channel = supabase
       .channel("social-realtime")
 
-      // 🔥 STABLE LIKE HANDLER (No Drift)
+      // 🔥 LIKE EVENTS (Safe + Stable)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_likes" },
         async (payload: any) => {
           const postId =
             payload.eventType === "DELETE"
-              ? payload.old.post_id
-              : payload.new.post_id;
+              ? payload.old?.post_id
+              : payload.new?.post_id;
 
           const eventUserId =
             payload.eventType === "DELETE"
-              ? payload.old.user_id
-              : payload.new.user_id;
+              ? payload.old?.user_id
+              : payload.new?.user_id;
 
-          // Ignore own events (optimistic already handled)
+          if (!postId) return;
           if (eventUserId === user.id) return;
 
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("post_likes")
             .select("user_id")
             .eq("post_id", postId);
+
+          if (error) return;
 
           const totalLikes = data?.length || 0;
           const likedByMe =
@@ -225,8 +227,10 @@ export default function FeedPage() {
         async (payload: any) => {
           const postId =
             payload.eventType === "DELETE"
-              ? payload.old.post_id
-              : payload.new.post_id;
+              ? payload.old?.post_id
+              : payload.new?.post_id;
+
+          if (!postId) return;
 
           if (payload.eventType === "INSERT") {
             const { data } = await supabase
