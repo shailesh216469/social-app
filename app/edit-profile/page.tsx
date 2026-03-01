@@ -42,14 +42,22 @@ export default function EditProfile() {
   }, []);
 
   const handleUpdate = async () => {
-    await supabase.from("profiles").update({
+  const { error } = await supabase
+    .from("profiles")
+    .update({
       full_name: fullName,
       username: username,
       bio: bio,
-    }).eq("id", user.id);
+    })
+    .eq("id", user.id);
 
-    router.push(`/profile/${username}`);
-  };
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  router.push(`/profile/${username}`);
+};
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
