@@ -28,12 +28,18 @@ type PostType = {
   likedByMe: boolean;
 };
 
+const PAGE_SIZE = 5;
+
 export default function FeedPage() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
   const [pendingCount, setPendingCount] = useState<number>(0);
+
+  const [page, setPage] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
 
   /* ---------------- INITIAL LOAD ---------------- */
 
@@ -46,16 +52,20 @@ export default function FeedPage() {
       }
 
       setUser(data.user);
-      await fetchPosts(data.user);
+      await fetchPosts(data.user, 0, false);
       await fetchPendingRequests(data.user);
     };
 
     init();
   }, [router]);
 
-  /* ---------------- FETCH POSTS ---------------- */
+  /* ---------------- FETCH POSTS WITH PAGINATION ---------------- */
 
-  const fetchPosts = async (currentUser: any) => {
+  const fetchPosts = async (
+    currentUser: any,
+    pageNumber: number = 0,
+    append: boolean = false
+  ) => {
     const { data: friendships } = await supabase
       .from("friendships")
       .select("*")
@@ -70,6 +80,9 @@ export default function FeedPage() {
     }
 
     friendIds.push(currentUser.id);
+
+    const from = pageNumber * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
     const { data } = await supabase
       .from("posts")
@@ -89,7 +102,8 @@ export default function FeedPage() {
         )
       `)
       .in("user_id", friendIds)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (!data) return;
 
@@ -103,8 +117,49 @@ export default function FeedPage() {
         ) || false,
     }));
 
-    setPosts(formatted);
+    if (data.length < PAGE_SIZE) {
+      setHasMore(false);
+    }
+
+    if (append) {
+      setPosts((prev) => [...prev, ...formatted]);
+    } else {
+      setPosts(formatted);
+    }
   };
+
+  /* ---------------- LOAD MORE ---------------- */
+
+  const loadMore = async () => {
+    if (!user || !hasMore || loadingMore) return;
+
+    setLoadingMore(true);
+    const nextPage = page + 1;
+
+    await fetchPosts(user, nextPage, true);
+
+    setPage(nextPage);
+    setLoadingMore(false);
+  };
+
+  /* ---------------- SCROLL DETECTION ---------------- */
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >=
+        document.body.offsetHeight - 200
+      ) {
+        loadMore();
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [page, hasMore, loadingMore, user]);
 
   /* ---------------- REALTIME ---------------- */
 
@@ -116,12 +171,12 @@ export default function FeedPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "comments" },
-        () => fetchPosts(user)
+        () => fetchPosts(user, 0, false)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_likes" },
-        () => fetchPosts(user)
+        () => fetchPosts(user, 0, false)
       )
       .subscribe();
 
@@ -193,7 +248,11 @@ export default function FeedPage() {
       {user && (
         <CreatePost
           userId={user.id}
-          onPostCreated={() => fetchPosts(user)}
+          onPostCreated={() => {
+            setPage(0);
+            setHasMore(true);
+            fetchPosts(user, 0, false);
+          }}
         />
       )}
 
@@ -212,6 +271,18 @@ export default function FeedPage() {
             />
           ))}
       </div>
+
+      {loadingMore && (
+        <p className="text-center mt-4 text-gray-500">
+          Loading more...
+        </p>
+      )}
+
+      {!hasMore && (
+        <p className="text-center mt-4 text-gray-400">
+          No more posts
+        </p>
+      )}
     </div>
   );
 }
