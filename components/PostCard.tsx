@@ -9,7 +9,6 @@ type CommentType = {
   user_id: string;
   created_at: string;
   profiles: { username: string } | null;
-  optimistic?: boolean;
 };
 
 type PostType = {
