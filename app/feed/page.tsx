@@ -117,6 +117,7 @@ export default function FeedPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "post_likes" },
         async (payload: any) => {
+console.log("Realtime event:", payload);
           const postId =
             payload.eventType === "DELETE"
               ? payload.old?.post_id
