@@ -13,6 +13,7 @@ type NotificationType = {
   type: string;
   actor_username: string;
   is_read: boolean;
+  post_id: string | null;
 };
 
 export default function FeedPage() {
@@ -85,7 +86,7 @@ export default function FeedPage() {
         id,
         type,
         is_read,
-        actor_id,
+        post_id,
         profiles:actor_id(username)
       `)
       .eq("user_id", currentUser.id)
@@ -97,6 +98,7 @@ export default function FeedPage() {
       id: n.id,
       type: n.type,
       is_read: n.is_read,
+      post_id: n.post_id,
       actor_username: Array.isArray(n.profiles)
         ? n.profiles[0]?.username
         : n.profiles?.username,
@@ -108,7 +110,7 @@ export default function FeedPage() {
     );
   };
 
-  /* ---------------- REALTIME ---------------- */
+  /* ---------------- REALTIME NOTIFICATIONS ---------------- */
 
   useEffect(() => {
     if (!user) return;
@@ -152,6 +154,7 @@ export default function FeedPage() {
         .from("post_likes")
         .insert({ post_id: postId, user_id: user.id });
 
+      // Create notification
       if (post.user_id !== user.id) {
         await supabase.from("notifications").insert({
           user_id: post.user_id,
@@ -179,6 +182,7 @@ export default function FeedPage() {
       content: text,
     });
 
+    // Create notification
     if (post.user_id !== user.id) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
@@ -191,6 +195,8 @@ export default function FeedPage() {
     await fetchPosts(user);
   };
 
+  /* ---------------- FRIEND REQUEST COUNT ---------------- */
+
   const fetchPendingRequests = async (currentUser: any) => {
     const { count } = await supabase
       .from("friend_requests")
@@ -201,10 +207,14 @@ export default function FeedPage() {
     setPendingCount(count || 0);
   };
 
+  /* ---------------- LOGOUT ---------------- */
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  /* ---------------- MARK NOTIFICATIONS READ ---------------- */
 
   const markNotificationsRead = async (id?: string) => {
     if (!user) return;
@@ -223,6 +233,8 @@ export default function FeedPage() {
 
     await fetchNotifications(user);
   };
+
+  /* ---------------- UI ---------------- */
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
