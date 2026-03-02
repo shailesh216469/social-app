@@ -36,7 +36,28 @@ export default function PostCard({
   onAddComment: (postId: string, text: string) => void;
   onDeleteComment: (commentId: string) => void;
 }) {
-  const [commentText, setCommentText] = useState<string>("");
+  const [commentText, setCommentText] = useState("");
+  const [lastTap, setLastTap] = useState<number>(0);
+
+  /* ---------------- DOUBLE TAP LIKE ---------------- */
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_PRESS_DELAY = 300;
+
+    if (now - lastTap < DOUBLE_PRESS_DELAY) {
+      if (!post.likedByMe) {
+        onLikeToggle(post.id, false);
+
+        // Haptic feedback (mobile)
+        if (navigator.vibrate) {
+          navigator.vibrate(10);
+        }
+      }
+    }
+
+    setLastTap(now);
+  };
 
   return (
     <div className="border p-4 rounded-lg shadow-sm bg-white">
@@ -49,30 +70,42 @@ export default function PostCard({
         {post.profiles?.username}
       </Link>
 
-      {/* POST CONTENT */}
-      <p className="mt-2">{post.content}</p>
+      {/* POST CONTENT (DOUBLE TAP ENABLED) */}
+      <p
+        className="mt-2 cursor-pointer select-none"
+        onClick={handleDoubleTap}
+      >
+        {post.content}
+      </p>
 
       {/* LIKE SECTION */}
-<div className="flex items-center gap-4 mt-3">
-  <button
-    onClick={() => onLikeToggle(post.id, post.likedByMe)}
-    className="relative px-3 py-1 rounded transition"
-  >
-    <span
-      className={`inline-block transition-transform duration-300 ${
-        post.likedByMe
-          ? "text-red-600 scale-125 animate-heartPop"
-          : "text-gray-600"
-      }`}
-    >
-      {post.likedByMe ? "❤️" : "🤍"}
-    </span>
-  </button>
+      <div className="flex items-center gap-4 mt-3">
+        <button
+          onClick={() => {
+            onLikeToggle(post.id, post.likedByMe);
 
-  <span className="text-gray-600 text-sm">
-    {post.likeCount} likes
-  </span>
-</div>
+            // Haptic feedback
+            if (navigator.vibrate) {
+              navigator.vibrate(10);
+            }
+          }}
+          className="relative px-3 py-1 rounded transition"
+        >
+          <span
+            className={`inline-block transition-transform duration-300 ${
+              post.likedByMe
+                ? "text-red-600 scale-125 animate-heartPop"
+                : "text-gray-600"
+            }`}
+          >
+            {post.likedByMe ? "❤️" : "🤍"}
+          </span>
+        </button>
+
+        <span className="text-gray-600 text-sm">
+          {post.likeCount} likes
+        </span>
+      </div>
 
       {/* COMMENTS */}
       <div className="mt-4 space-y-3">
