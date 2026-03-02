@@ -53,22 +53,26 @@ export default function PostCard({
       <p className="mt-2">{post.content}</p>
 
       {/* LIKE SECTION */}
-      <div className="flex items-center gap-4 mt-3">
-        <button
-          onClick={() => onLikeToggle(post.id, post.likedByMe)}
-          className={`px-3 py-1 rounded transition ${
-            post.likedByMe
-              ? "bg-red-600 text-white"
-              : "bg-gray-200 hover:bg-gray-300"
-          }`}
-        >
-          {post.likedByMe ? "Unlike ❤️" : "Like 🤍"}
-        </button>
+<div className="flex items-center gap-4 mt-3">
+  <button
+    onClick={() => onLikeToggle(post.id, post.likedByMe)}
+    className="relative px-3 py-1 rounded transition"
+  >
+    <span
+      className={`inline-block transition-transform duration-300 ${
+        post.likedByMe
+          ? "text-red-600 scale-125 animate-heartPop"
+          : "text-gray-600"
+      }`}
+    >
+      {post.likedByMe ? "❤️" : "🤍"}
+    </span>
+  </button>
 
-        <span className="text-gray-600 text-sm">
-          {post.likeCount} likes
-        </span>
-      </div>
+  <span className="text-gray-600 text-sm">
+    {post.likeCount} likes
+  </span>
+</div>
 
       {/* COMMENTS */}
       <div className="mt-4 space-y-3">
