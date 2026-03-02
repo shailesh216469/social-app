@@ -8,33 +8,21 @@ import PostCard from "@/components/PostCard";
 import SearchUsers from "@/components/SearchUsers";
 import FeedHeader from "@/components/FeedHeader";
 
-type CommentType = {
+type NotificationType = {
   id: string;
-  content: string;
-  user_id: string;
-  created_at: string;
-  profiles: { username: string } | null;
-  optimistic?: boolean;
-};
-
-type PostType = {
-  id: string;
-  content: string;
-  created_at: string;
-  user_id: string;
-  profiles: { username: string } | null;
-  likeCount: number;
-  likedByMe: boolean;
-  comments: CommentType[];
+  type: string;
+  actor_username: string;
+  is_read: boolean;
 };
 
 export default function FeedPage() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
-  const [posts, setPosts] = useState<PostType[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [notifications, setNotifications] = useState<NotificationType[]>([]);
 
   /* ---------------- INIT ---------------- */
 
@@ -67,35 +55,17 @@ export default function FeedPage() {
         user_id,
         profiles(username),
         post_likes(user_id),
-        comments(
-          id,
-          content,
-          user_id,
-          created_at,
-          profiles(username)
-        )
+        comments(id)
       `)
       .order("created_at", { ascending: false });
 
     if (!data) return;
 
-    const formatted: PostType[] = data.map((post: any) => ({
-      id: post.id,
-      content: post.content,
-      created_at: post.created_at,
-      user_id: post.user_id,
+    const formatted = data.map((post: any) => ({
+      ...post,
       profiles: Array.isArray(post.profiles)
-        ? post.profiles[0] || null
+        ? post.profiles[0]
         : post.profiles,
-      comments: (post.comments || []).map((c: any) => ({
-        id: c.id,
-        content: c.content,
-        user_id: c.user_id,
-        created_at: c.created_at,
-        profiles: Array.isArray(c.profiles)
-          ? c.profiles[0] || null
-          : c.profiles,
-      })),
       likeCount: post.post_likes?.length || 0,
       likedByMe:
         post.post_likes?.some(
@@ -109,16 +79,36 @@ export default function FeedPage() {
   /* ---------------- FETCH NOTIFICATIONS ---------------- */
 
   const fetchNotifications = async (currentUser: any) => {
-    const { count } = await supabase
+    const { data } = await supabase
       .from("notifications")
-      .select("*", { count: "exact", head: true })
+      .select(`
+        id,
+        type,
+        is_read,
+        actor_id,
+        profiles:actor_id(username)
+      `)
       .eq("user_id", currentUser.id)
-      .eq("is_read", false);
+      .order("created_at", { ascending: false });
 
-    setNotificationCount(count || 0);
+    if (!data) return;
+
+    const formatted = data.map((n: any) => ({
+      id: n.id,
+      type: n.type,
+      is_read: n.is_read,
+      actor_username: Array.isArray(n.profiles)
+        ? n.profiles[0]?.username
+        : n.profiles?.username,
+    }));
+
+    setNotifications(formatted);
+    setNotificationCount(
+      formatted.filter((n) => !n.is_read).length
+    );
   };
 
-  /* ---------------- REALTIME NOTIFICATIONS ---------------- */
+  /* ---------------- REALTIME ---------------- */
 
   useEffect(() => {
     if (!user) return;
@@ -144,7 +134,7 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- TOGGLE LIKE ---------------- */
+  /* ---------------- LIKE ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
@@ -175,7 +165,7 @@ export default function FeedPage() {
     await fetchPosts(user);
   };
 
-  /* ---------------- ADD COMMENT ---------------- */
+  /* ---------------- COMMENT ---------------- */
 
   const addComment = async (postId: string, text: string) => {
     if (!user || !text.trim()) return;
@@ -201,11 +191,6 @@ export default function FeedPage() {
     await fetchPosts(user);
   };
 
-  const deleteComment = async (commentId: string) => {
-    await supabase.from("comments").delete().eq("id", commentId);
-    await fetchPosts(user);
-  };
-
   const fetchPendingRequests = async (currentUser: any) => {
     const { count } = await supabase
       .from("friend_requests")
@@ -221,50 +206,46 @@ export default function FeedPage() {
     router.push("/login");
   };
 
-  const markNotificationsRead = async () => {
+  const markNotificationsRead = async (id?: string) => {
     if (!user) return;
 
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", user.id);
+    if (id) {
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id);
+    } else {
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", user.id);
+    }
 
-    setNotificationCount(0);
+    await fetchNotifications(user);
   };
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
-
       {user && (
         <FeedHeader
           pendingCount={pendingCount}
           notificationCount={notificationCount}
+          notifications={notifications}
           onLogout={handleLogout}
-          onOpenNotifications={markNotificationsRead}
+          onMarkRead={markNotificationsRead}
         />
       )}
 
-      {user && (
-        <CreatePost
-          userId={user.id}
-          onPostCreated={() => fetchPosts(user)}
+      {posts.map((post) => (
+        <PostCard
+          key={post.id}
+          post={post}
+          currentUserId={user?.id}
+          onLikeToggle={toggleLike}
+          onAddComment={addComment}
+          onDeleteComment={() => {}}
         />
-      )}
-
-      {user && <SearchUsers currentUserId={user.id} />}
-
-      <div className="space-y-6">
-        {posts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            currentUserId={user.id}
-            onLikeToggle={toggleLike}
-            onAddComment={addComment}
-            onDeleteComment={deleteComment}
-          />
-        ))}
-      </div>
+      ))}
     </div>
   );
 }
