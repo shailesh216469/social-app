@@ -134,27 +134,66 @@ export default function FeedPage() {
   /* ---------------- REALTIME COMMENTS ---------------- */
 
   useEffect(() => {
-    if (!user) return;
+  if (!user) return;
 
-    const channel = supabase
-      .channel("comments-channel")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "comments",
-        },
-        async () => {
-          await fetchPosts(user);
-        }
-      )
-      .subscribe();
+  const channel = supabase
+    .channel("comments-optimized-channel")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "comments",
+      },
+      async (payload: any) => {
+        const postId =
+          payload.eventType === "DELETE"
+            ? payload.old?.post_id
+            : payload.new?.post_id;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
+        if (!postId) return;
+
+        // Fetch only comments of this post
+        const { data } = await supabase
+          .from("comments")
+          .select(`
+            id,
+            content,
+            user_id,
+            created_at,
+            profiles(username)
+          `)
+          .eq("post_id", postId)
+          .order("created_at", { ascending: true });
+
+        if (!data) return;
+
+        const normalized = data.map((c: any) => ({
+          id: c.id,
+          content: c.content,
+          user_id: c.user_id,
+          created_at: c.created_at,
+          profiles: Array.isArray(c.profiles)
+            ? c.profiles[0] || null
+            : c.profiles,
+        }));
+
+        // Update only affected post
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId
+              ? { ...post, comments: normalized }
+              : post
+          )
+        );
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user]);
 
   /* ---------------- TOGGLE LIKE ---------------- */
 
