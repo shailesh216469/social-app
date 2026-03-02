@@ -28,13 +28,13 @@ type PostType = {
   comments: CommentType[];
 };
 
-const PAGE_SIZE = 5;
-
 export default function FeedPage() {
   const router = useRouter();
+
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   /* ---------------- INIT ---------------- */
 
@@ -45,10 +45,13 @@ export default function FeedPage() {
         router.push("/login");
         return;
       }
+
       setUser(data.user);
       await fetchPosts(data.user);
       await fetchPendingRequests(data.user);
+      await fetchNotifications(data.user);
     };
+
     init();
   }, [router]);
 
@@ -72,8 +75,7 @@ export default function FeedPage() {
           profiles(username)
         )
       `)
-      .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE);
+      .order("created_at", { ascending: false });
 
     if (!data) return;
 
@@ -104,76 +106,35 @@ export default function FeedPage() {
     setPosts(formatted);
   };
 
-  /* ---------------- REALTIME LIKES ---------------- */
+  /* ---------------- FETCH NOTIFICATIONS ---------------- */
+
+  const fetchNotifications = async (currentUser: any) => {
+    const { count } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", currentUser.id)
+      .eq("is_read", false);
+
+    setNotificationCount(count || 0);
+  };
+
+  /* ---------------- REALTIME NOTIFICATIONS ---------------- */
 
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel("likes-channel")
+      .channel("notifications-channel")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "post_likes" },
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
         async () => {
-          await fetchPosts(user);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
-
-  /* ---------------- REALTIME COMMENTS (OPTIMIZED) ---------------- */
-
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel("comments-channel")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "comments" },
-        async (payload: any) => {
-          const postId =
-            payload.eventType === "DELETE"
-              ? payload.old?.post_id
-              : payload.new?.post_id;
-
-          if (!postId) return;
-
-          const { data } = await supabase
-            .from("comments")
-            .select(`
-              id,
-              content,
-              user_id,
-              created_at,
-              profiles(username)
-            `)
-            .eq("post_id", postId)
-            .order("created_at", { ascending: true });
-
-          if (!data) return;
-
-          const normalized: CommentType[] = data.map((c: any) => ({
-            id: c.id,
-            content: c.content,
-            user_id: c.user_id,
-            created_at: c.created_at,
-            profiles: Array.isArray(c.profiles)
-              ? c.profiles[0] || null
-              : c.profiles,
-          }));
-
-          setPosts((prev) =>
-            prev.map((post) =>
-              post.id === postId
-                ? { ...post, comments: normalized }
-                : post
-            )
-          );
+          await fetchNotifications(user);
         }
       )
       .subscribe();
@@ -188,19 +149,8 @@ export default function FeedPage() {
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
 
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              likedByMe: !liked,
-              likeCount: liked
-                ? Math.max(post.likeCount - 1, 0)
-                : post.likeCount + 1,
-            }
-          : post
-      )
-    );
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
 
     if (liked) {
       await supabase
@@ -208,93 +158,52 @@ export default function FeedPage() {
         .delete()
         .match({ post_id: postId, user_id: user.id });
     } else {
-      await supabase.from("post_likes").insert({
-        post_id: postId,
-        user_id: user.id,
-      });
+      await supabase
+        .from("post_likes")
+        .insert({ post_id: postId, user_id: user.id });
+
+      if (post.user_id !== user.id) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          actor_id: user.id,
+          post_id: postId,
+          type: "like",
+        });
+      }
     }
+
+    await fetchPosts(user);
   };
 
-  /* ---------------- OPTIMISTIC COMMENT ---------------- */
+  /* ---------------- ADD COMMENT ---------------- */
 
   const addComment = async (postId: string, text: string) => {
     if (!user || !text.trim()) return;
 
-    const tempId = "temp-" + Date.now();
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
 
-    const optimisticComment: CommentType = {
-      id: tempId,
-      content: text,
+    await supabase.from("comments").insert({
+      post_id: postId,
       user_id: user.id,
-      created_at: new Date().toISOString(),
-      profiles: { username: user.email || "You" },
-      optimistic: true,
-    };
+      content: text,
+    });
 
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? { ...post, comments: [...post.comments, optimisticComment] }
-          : post
-      )
-    );
-
-    const { data, error } = await supabase
-      .from("comments")
-      .insert({
+    if (post.user_id !== user.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        actor_id: user.id,
         post_id: postId,
-        user_id: user.id,
-        content: text,
-      })
-      .select(`
-        id,
-        content,
-        user_id,
-        created_at,
-        profiles(username)
-      `)
-      .single();
-
-    if (error || !data) {
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                comments: post.comments.filter((c) => c.id !== tempId),
-              }
-            : post
-        )
-      );
-      return;
+        type: "comment",
+      });
     }
 
-    const normalized: CommentType = {
-      id: data.id,
-      content: data.content,
-      user_id: data.user_id,
-      created_at: data.created_at,
-      profiles: Array.isArray(data.profiles)
-        ? data.profiles[0] || null
-        : data.profiles,
-    };
-
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              comments: post.comments.map((c) =>
-                c.id === tempId ? normalized : c
-              ),
-            }
-          : post
-      )
-    );
+    await fetchPosts(user);
   };
 
   const deleteComment = async (commentId: string) => {
     await supabase.from("comments").delete().eq("id", commentId);
+    await fetchPosts(user);
   };
 
   const fetchPendingRequests = async (currentUser: any) => {
@@ -312,12 +221,26 @@ export default function FeedPage() {
     router.push("/login");
   };
 
+  const markNotificationsRead = async () => {
+    if (!user) return;
+
+    await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", user.id);
+
+    setNotificationCount(0);
+  };
+
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
+
       {user && (
         <FeedHeader
           pendingCount={pendingCount}
+          notificationCount={notificationCount}
           onLogout={handleLogout}
+          onOpenNotifications={markNotificationsRead}
         />
       )}
 
