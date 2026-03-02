@@ -58,7 +58,7 @@ export default function FeedPage() {
   /* ---------------- FETCH POSTS ---------------- */
 
   const fetchPosts = async (currentUser: any) => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("posts")
       .select(`
         id,
@@ -78,7 +78,7 @@ export default function FeedPage() {
       .order("created_at", { ascending: false })
       .limit(PAGE_SIZE);
 
-    if (error || !data) return;
+    if (!data) return;
 
     const formatted: PostType[] = data.map((post: any) => ({
       id: post.id,
@@ -110,63 +110,13 @@ export default function FeedPage() {
   /* ---------------- REALTIME LIKES ---------------- */
 
   useEffect(() => {
-  if (!user) return;
-
-  const channel = supabase
-    .channel("likes-channel")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "post_likes" },
-      async (payload: any) => {
-        const postId =
-          payload.eventType === "DELETE"
-            ? payload.old?.post_id
-            : payload.new?.post_id;
-
-        if (!postId) return;
-
-        const { data, error } = await supabase.rpc(
-          "get_post_like_stats",
-          {
-            post_uuid: postId,
-            current_user_id: user.id,
-          }
-        );
-
-        if (error || !data || data.length === 0) return;
-
-        const stats = data[0];
-
-        setPosts((prev) =>
-          prev.map((post) =>
-            post.id === postId
-              ? {
-                  ...post,
-                  likeCount: Number(stats.like_count),
-                  likedByMe: stats.liked_by_me,
-                }
-              : post
-          )
-        );
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [user]);
-
-  /* ---------------- REALTIME COMMENTS ---------------- */
-
-  useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel("comments-channel")
+      .channel("likes-channel")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "comments" },
+        { event: "*", schema: "public", table: "post_likes" },
         async (payload: any) => {
           const postId =
             payload.eventType === "DELETE"
@@ -175,34 +125,26 @@ export default function FeedPage() {
 
           if (!postId) return;
 
-          const { data, error } = await supabase
-            .from("comments")
-            .select(`
-              id,
-              content,
-              user_id,
-              created_at,
-              profiles(username)
-            `)
-            .eq("post_id", postId)
-            .order("created_at", { ascending: true });
+          const { data } = await supabase.rpc(
+            "get_post_like_stats",
+            {
+              post_uuid: postId,
+              current_user: user.id, // ✅ must match SQL
+            }
+          );
 
-          if (error || !data) return;
+          if (!data || data.length === 0) return;
 
-          const normalized = data.map((c: any) => ({
-            id: c.id,
-            content: c.content,
-            user_id: c.user_id,
-            created_at: c.created_at,
-            profiles: Array.isArray(c.profiles)
-              ? c.profiles[0] || null
-              : c.profiles,
-          }));
+          const stats = data[0];
 
           setPosts((prev) =>
             prev.map((post) =>
               post.id === postId
-                ? { ...post, comments: normalized }
+                ? {
+                    ...post,
+                    likeCount: Number(stats.like_count),
+                    likedByMe: stats.liked_by_me,
+                  }
                 : post
             )
           );
@@ -215,10 +157,25 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- TOGGLE LIKE ---------------- */
+  /* ---------------- TOGGLE LIKE (OPTIMISTIC) ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
+
+    // Optimistic update
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              likedByMe: !liked,
+              likeCount: liked
+                ? Math.max(post.likeCount - 1, 0)
+                : post.likeCount + 1,
+            }
+          : post
+      )
+    );
 
     if (liked) {
       await supabase
@@ -251,7 +208,6 @@ export default function FeedPage() {
 
   const deleteComment = async (commentId: string) => {
     if (!user) return;
-
     await supabase.from("comments").delete().eq("id", commentId);
   };
 
@@ -273,8 +229,6 @@ export default function FeedPage() {
     await supabase.auth.signOut();
     router.push("/login");
   };
-
-  /* ---------------- UI ---------------- */
 
   return (
     <div className="min-h-screen p-6 max-w-xl mx-auto">
