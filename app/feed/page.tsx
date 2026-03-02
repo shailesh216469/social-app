@@ -31,7 +31,6 @@ const PAGE_SIZE = 5;
 
 export default function FeedPage() {
   const router = useRouter();
-
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<PostType[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -129,7 +128,7 @@ export default function FeedPage() {
             "get_post_like_stats",
             {
               post_uuid: postId,
-              current_user_uuid: user.id, // ✅ must match SQL
+              current_user_uuid: user.id,
             }
           );
 
@@ -157,7 +156,7 @@ export default function FeedPage() {
     };
   }, [user]);
 
-  /* ---------------- TOGGLE LIKE (OPTIMISTIC) ---------------- */
+  /* ---------------- TOGGLE LIKE ---------------- */
 
   const toggleLike = async (postId: string, liked: boolean) => {
     if (!user) return;
