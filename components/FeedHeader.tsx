@@ -17,13 +17,13 @@ export default function FeedHeader({
     <div className="flex justify-between items-center mb-6">
       <h1 className="text-xl font-bold">Social App</h1>
 
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-6 items-center">
 
         {/* Friend Requests */}
-        <Link href="/friends" className="relative">
+        <Link href="/friends" className="relative text-xl">
           👥
           {pendingCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 rounded-full">
+            <span className="absolute -top-2 -right-3 bg-red-600 text-white text-xs px-2 rounded-full">
               {pendingCount}
             </span>
           )}
@@ -32,11 +32,11 @@ export default function FeedHeader({
         {/* Notifications */}
         <button
           onClick={onOpenNotifications}
-          className="relative"
+          className="relative text-xl"
         >
           🔔
           {notificationCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 rounded-full animate-pulse">
+            <span className="absolute -top-2 -right-3 bg-red-600 text-white text-xs px-2 rounded-full animate-pulse">
               {notificationCount}
             </span>
           )}
