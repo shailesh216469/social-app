@@ -110,57 +110,94 @@ export default function FeedPage() {
   /* ---------------- REALTIME LIKES (RPC OPTIMIZED) ---------------- */
 
   useEffect(() => {
-    if (!user) return;
+  if (!user) return;
 
-    const channel = supabase
-      .channel("likes-rpc-channel")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_likes" },
-        async (payload: any) => {
-          let postId: string | null = null;
+  const channel = supabase
+    .channel("likes-final-channel")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "post_likes" },
+      async (payload: any) => {
+        console.log("🔥 Like event:", payload);
 
-          if (payload.eventType === "INSERT") {
-            postId = payload.new?.post_id;
-          }
+        let postId: string | null = null;
 
-          if (payload.eventType === "DELETE") {
-            postId = payload.old?.post_id;
-          }
-
-          if (!postId) return;
-
-          const { data, error } = await supabase.rpc(
-            "get_post_like_stats",
-            {
-              post_uuid: postId,
-              current_user: user.id,
-            }
-          );
-
-          if (error || !data || data.length === 0) return;
-
-          const stats = data[0];
-
-          setPosts((prev) =>
-            prev.map((post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    likeCount: Number(stats.like_count),
-                    likedByMe: stats.liked_by_me,
-                  }
-                : post
-            )
-          );
+        // INSERT is safe
+        if (payload.eventType === "INSERT") {
+          postId = payload.new?.post_id;
         }
-      )
-      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
+        // DELETE is unreliable → we derive postId from state
+        if (payload.eventType === "DELETE") {
+          const deletedLikeId = payload.old?.id;
+
+          if (!deletedLikeId) return;
+
+          // Find post that contains this like via RPC refresh
+          // We simply refresh all visible posts' stats safely
+
+          for (const post of posts) {
+            const { data } = await supabase.rpc(
+              "get_post_like_stats",
+              {
+                post_uuid: post.id,
+                current_user: user.id,
+              }
+            );
+
+            if (!data || data.length === 0) continue;
+
+            const stats = data[0];
+
+            setPosts((prev) =>
+              prev.map((p) =>
+                p.id === post.id
+                  ? {
+                      ...p,
+                      likeCount: Number(stats.like_count),
+                      likedByMe: stats.liked_by_me,
+                    }
+                  : p
+              )
+            );
+          }
+
+          return;
+        }
+
+        if (!postId) return;
+
+        const { data } = await supabase.rpc(
+          "get_post_like_stats",
+          {
+            post_uuid: postId,
+            current_user: user.id,
+          }
+        );
+
+        if (!data || data.length === 0) return;
+
+        const stats = data[0];
+
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  likeCount: Number(stats.like_count),
+                  likedByMe: stats.liked_by_me,
+                }
+              : post
+          )
+        );
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user, posts]);
 
   /* ---------------- REALTIME COMMENTS (STABLE VERSION) ---------------- */
 
